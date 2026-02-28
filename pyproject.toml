@@ -1,0 +1,30 @@
+[project]
+name = "timelinema"
+version = "1.0.0"
+description = "Timeline viewer for asciinema recordings"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "0xPreDa" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "flask>=3.0",
+    "ansi2html>=1.9",
+]
+
+[project.scripts]
+timelinema = "timelinema.app:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+timelinema = ["templates/*.html", "static/*.css", "static/*.js"]

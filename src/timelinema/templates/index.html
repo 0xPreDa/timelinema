@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timelinema</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏱️</text></svg>">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="header-row-top">
+                <div class="logo">Timelinema</div>
+                <div class="search-group">
+                    <div class="search-wrapper">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        <input type="search" id="search" placeholder="Search commands... (Enter to jump)" autocomplete="off">
+                    </div>
+                    <div class="search-nav">
+                        <button id="search-prev" class="search-nav-btn" title="Previous match (Shift+Enter)">&#9650;</button>
+                        <button id="search-next" class="search-nav-btn" title="Next match (Enter)">&#9660;</button>
+                        <span id="search-counter" class="search-counter"></span>
+                    </div>
+                </div>
+                <span id="stats" class="stats"></span>
+                <button id="theme-toggle">☀️</button>
+            </div>
+            <div class="header-row-bottom">
+                <div class="filter-group">
+                    <select id="session-filter">
+                        <option value="">All sessions</option>
+                    </select>
+                </div>
+                <div class="header-sep"></div>
+                <div class="filter-group">
+                    <button id="hide-no-output" class="toggle-btn" title="Hide commands without output">Hide empty</button>
+                </div>
+                <div class="header-sep"></div>
+                <div class="filter-group">
+                    <select id="tz-select" title="Display timezone"></select>
+                </div>
+                <div class="header-sep"></div>
+                <div class="filter-group">
+                    <button id="upload-btn" title="Upload .asciinema files">Upload</button>
+                    <input type="file" id="upload-input" multiple accept=".asciinema,.gz" hidden>
+                    <button id="reload-btn">Reload</button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div id="drop-overlay" class="drop-overlay hidden">
+        <div class="drop-message">Drop .asciinema files here</div>
+    </div>
+
+    <main>
+        <div id="timeline"></div>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
