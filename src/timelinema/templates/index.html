@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Timelinema</title>
     <link rel="stylesheet" href="/static/style.css">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏱️</text></svg>">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#x23F1;&#xFE0F;</text></svg>">
 </head>
 <body>
     <header>
@@ -26,7 +26,7 @@
                     </div>
                 </div>
                 <span id="stats" class="stats"></span>
-                <button id="theme-toggle">☀️</button>
+                <button id="theme-toggle">&#x2600;&#xFE0F;</button>
             </div>
             <div class="header-row-bottom">
                 <div class="filter-group">
@@ -48,6 +48,18 @@
                     <input type="file" id="upload-input" multiple accept=".asciinema,.gz" hidden>
                     <button id="reload-btn">Reload</button>
                 </div>
+                <div class="header-sep"></div>
+                <div class="filter-group">
+                    <button id="export-btn" class="toggle-btn" title="Export project">Export</button>
+                    <button id="import-btn" class="toggle-btn" title="Import project">Import</button>
+                    <input type="file" id="import-input" accept=".zip" hidden>
+                </div>
+                {% if auth_enabled %}
+                <div class="header-sep"></div>
+                <div class="filter-group">
+                    <button id="logout-btn" class="toggle-btn" title="Logout">Logout</button>
+                </div>
+                {% endif %}
             </div>
         </div>
     </header>
@@ -56,9 +68,64 @@
         <div class="drop-message">Drop .asciinema files here</div>
     </div>
 
-    <main>
-        <div id="timeline"></div>
-    </main>
+    <div class="app-layout">
+        <aside id="sidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-title">Projects</span>
+                <button id="new-project-btn" class="sidebar-add-btn" title="New project">+</button>
+            </div>
+            <div id="new-project-form" class="new-project-form hidden">
+                <input type="text" id="new-project-name" placeholder="Project name" autocomplete="off">
+                <button id="new-project-save" class="sidebar-save-btn">OK</button>
+                <button id="new-project-cancel" class="sidebar-cancel-btn">&#10005;</button>
+            </div>
+            <ul id="project-list" class="project-list"></ul>
+        </aside>
+        <main>
+            <div id="timeline"></div>
+        </main>
+    </div>
+
+    <!-- Export dialog -->
+    <dialog id="export-dialog">
+        <div class="dialog-content">
+            <h3>Export project</h3>
+            <p id="export-project-name"></p>
+            <label class="checkbox-label">
+                <input type="checkbox" id="export-include-ansi" checked>
+                Include ANSI color codes
+            </label>
+            <div class="dialog-actions">
+                <button id="export-download-btn" class="btn-primary">Download</button>
+                <button id="export-cancel-btn" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Rename dialog -->
+    <dialog id="rename-dialog">
+        <div class="dialog-content">
+            <h3>Rename project</h3>
+            <input type="text" id="rename-input" class="dialog-input" placeholder="Project name" autocomplete="off">
+            <div class="dialog-actions">
+                <button id="rename-ok-btn" class="btn-primary">OK</button>
+                <button id="rename-cancel-btn" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </dialog>
+
+    <!-- Delete confirmation dialog -->
+    <dialog id="delete-dialog">
+        <div class="dialog-content">
+            <h3>Delete project</h3>
+            <p id="delete-project-name"></p>
+            <p class="dialog-warning">This will remove all session data from the database. Recording files on disk will NOT be deleted.</p>
+            <div class="dialog-actions">
+                <button id="delete-ok-btn" class="btn-danger">Delete</button>
+                <button id="delete-cancel-btn" class="btn-secondary">Cancel</button>
+            </div>
+        </div>
+    </dialog>
 
     <script src="/static/app.js"></script>
 </body>

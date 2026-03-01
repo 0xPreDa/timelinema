@@ -1,0 +1,24 @@
+# Timelinema configuration
+# Copy this file to config.toml and adjust as needed.
+# Launch with: timelinema --config config.toml
+
+# ── Server ────────────────────────────────────────────────
+# All fields are optional. CLI arguments (--host, --port, etc.)
+# take precedence over these values.
+[server]
+host = "127.0.0.1"        # Use "0.0.0.0" to expose on the network
+port = 5000
+data_dir = "./data"        # Directory containing .asciinema recordings
+db = "timelinema.db"       # SQLite database path
+
+# ── Authentication ────────────────────────────────────────
+# Remove or comment out this section to disable authentication.
+# When enabled, all pages and API endpoints require login.
+[auth]
+password = "change-me"
+
+# ── Session secret ────────────────────────────────────────
+# Optional. Used to sign browser session cookies.
+# If omitted, a random key is generated at each startup
+# (existing sessions will be invalidated on restart).
+# secret_key = "generate-a-long-random-string-here"

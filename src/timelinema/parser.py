@@ -29,7 +29,15 @@ CSI_NON_SGR_RE = re.compile(r"\x1b\[[\d;]*[A-LN-Za-ln-z]")
 # Other control chars (keep \n, \r, \t)
 CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1a]")
 
+# SGR (color/style) sequences only: \x1b[...m
+SGR_RE = re.compile(r"\x1b\[[\d;]*m")
+
 _converter = Ansi2HTMLConverter(inline=True, dark_bg=True, scheme="xterm")
+
+
+def strip_ansi_sgr(text: str) -> str:
+    """Remove ANSI SGR (color/style) escape sequences from text."""
+    return SGR_RE.sub("", text)
 
 
 def extract_command_from_title(data: str) -> str | None:
