@@ -3,7 +3,11 @@
 import argparse
 import io
 import json
+import os
 import secrets
+import signal
+import subprocess
+import sys
 import time
 import tomllib
 import zipfile
@@ -472,7 +476,7 @@ def main():
     server_cfg = (config or {}).get("server", {})
     host = args.host or server_cfg.get("host", "127.0.0.1")
     port = args.port or server_cfg.get("port", 5000)
-    data_dir_str = args.data_dir or server_cfg.get("data_dir", "./data")
+    data_dir_str = args.data_dir or server_cfg.get("data_dir", ".")
     db_path = args.db or server_cfg.get("db", "timelinema.db")
 
     data_dir = Path(data_dir_str)
@@ -487,6 +491,84 @@ def main():
     app = create_app(db_path=db_path, data_dir=str(data_dir), config=config)
     print(f"\nTimelinema running at http://{host}:{port}")
     app.run(host=host, port=port, debug=False)
+
+
+def _get_pidfile():
+    """Return the path to the PID file in the user's runtime or home directory."""
+    runtime_dir = os.environ.get("XDG_RUNTIME_DIR", Path.home())
+    return Path(runtime_dir) / "timelinema.pid"
+
+
+def _parse_start_args():
+    """Parse CLI arguments for start/stop commands (same as main)."""
+    ap = argparse.ArgumentParser(description="Timelinema background control")
+    ap.add_argument("--host", default=None)
+    ap.add_argument("--port", type=int, default=None)
+    ap.add_argument("--data-dir", default=None)
+    ap.add_argument("--db", default=None)
+    ap.add_argument("--config", default=None)
+    args = ap.parse_args()
+
+    config = None
+    if args.config:
+        config_path = Path(args.config)
+        if config_path.is_file():
+            with open(config_path, "rb") as f:
+                config = tomllib.load(f)
+
+    server_cfg = (config or {}).get("server", {})
+    host = args.host or server_cfg.get("host", "127.0.0.1")
+    port = args.port or server_cfg.get("port", 5000)
+    return host, port
+
+
+def start():
+    """Start timelinema as a background process."""
+    pidfile = _get_pidfile()
+    host, port = _parse_start_args()
+
+    # Check if already running
+    if pidfile.exists():
+        pid = int(pidfile.read_text().strip())
+        try:
+            os.kill(pid, 0)
+            print(f"Timelinema is already running at http://{host}:{port}")
+            return
+        except ProcessLookupError:
+            pidfile.unlink()
+
+    # Launch timelinema in background, forwarding all CLI arguments
+    cmd = [sys.executable, "-m", "timelinema.app"] + sys.argv[1:]
+    proc = subprocess.Popen(
+        cmd,
+        stdout=open(pidfile.with_suffix(".log"), "a"),
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    pidfile.write_text(str(proc.pid))
+    print(f"Timelinema started at http://{host}:{port}")
+
+
+def stop():
+    """Stop a running timelinema background process."""
+    pidfile = _get_pidfile()
+
+    if not pidfile.exists():
+        print("Timelinema is not running (no PID file found).")
+        return
+
+    pid = int(pidfile.read_text().strip())
+    try:
+        os.kill(pid, signal.SIGTERM)
+        print("Timelinema stopped.")
+    except ProcessLookupError:
+        print("Timelinema was already stopped.")
+    finally:
+        pidfile.unlink(missing_ok=True)
+
+
+if __name__ == "__main__":
+    main()
 
 
 if __name__ == "__main__":

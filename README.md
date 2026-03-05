@@ -23,27 +23,40 @@ Timeline viewer for [asciinema](https://asciinema.org/) terminal recordings. Par
 ## Installation (Recommended)
 
 ```bash
-pipx install timelinema
+pipx install 'git+https://github.com/0xPreDa/timelinema.git'
 ```
 
 ## Usage
+
+### Foreground
 
 ```bash
 timelinema [--host HOST] [--port PORT] [--data-dir DIR] [--db DBPATH] [--config CONFIG]
 ```
 
+### Background (start / stop)
+
+```bash
+timelinema-start [--host HOST] [--port PORT] [--data-dir DIR] [--db DBPATH] [--config CONFIG]
+timelinema-stop
+```
+
+`timelinema-start` launches the server in the background and prints the URL to access it. `timelinema-stop` shuts it down.
+
+### Options
+
 | Option       | Default          | Description                              |
 |--------------|------------------|------------------------------------------|
 | `--host`     | `127.0.0.1`     | Bind address (`0.0.0.0` for network)     |
 | `--port`     | `5000`           | Port number                              |
-| `--data-dir` | `./data`         | Directory containing `.asciinema` files  |
+| `--data-dir` | `.` (current dir)| Directory containing `.asciinema` files  |
 | `--db`       | `timelinema.db`  | SQLite database path                     |
 | `--config`   | *(none)*         | Path to TOML configuration file          |
 
 Example:
 
 ```bash
-timelinema --data-dir ./data --port 8080
+timelinema-start --data-dir ./recordings --port 8080
 ```
 
 Then open `http://127.0.0.1:8080` in your browser.
@@ -130,4 +143,4 @@ src/timelinema/
 
 ## License
 
-See [LICENSE](LICENSE) if present.
+See [LICENSE](LICENSE).

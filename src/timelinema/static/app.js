@@ -713,6 +713,13 @@ function initExportImport() {
         }
     });
 
+    const importDialog = document.getElementById('import-dialog');
+    const importDialogTitle = document.getElementById('import-dialog-title');
+    const importDialogMessage = document.getElementById('import-dialog-message');
+    const importOkBtn = document.getElementById('import-ok-btn');
+
+    importOkBtn.addEventListener('click', () => importDialog.close());
+
     importBtn.addEventListener('click', () => importInput.click());
     importInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
@@ -730,17 +737,23 @@ function initExportImport() {
             const data = await res.json();
 
             if (!res.ok) {
-                alert(data.error || 'Import failed');
+                importDialogTitle.textContent = 'Import failed';
+                importDialogMessage.textContent = data.error || 'Import failed';
+                importDialog.showModal();
                 return;
             }
 
-            alert(`Imported project "${data.project_name}"\n${data.imported} session(s) imported, ${data.skipped} skipped`);
+            importDialogTitle.textContent = 'Import successful';
+            importDialogMessage.textContent = `Project "${data.project_name}" — ${data.imported} session(s) imported, ${data.skipped} skipped`;
+            importDialog.showModal();
 
             // Switch to imported project
             state.activeProjectId = data.project_id;
             await loadProjects();
         } catch (err) {
-            alert('Import failed');
+            importDialogTitle.textContent = 'Import failed';
+            importDialogMessage.textContent = 'An error occurred during import.';
+            importDialog.showModal();
         } finally {
             importBtn.disabled = false;
             importBtn.textContent = 'Import';

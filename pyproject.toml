@@ -17,6 +17,8 @@ dependencies = [
 
 [project.scripts]
 timelinema = "timelinema.app:main"
+timelinema-start = "timelinema.app:start"
+timelinema-stop = "timelinema.app:stop"
 
 [build-system]
 requires = ["setuptools>=68"]
