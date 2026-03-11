@@ -8,7 +8,7 @@
 [server]
 host = "127.0.0.1"        # Use "0.0.0.0" to expose on the network
 port = 5000
-data_dir = "./data"        # Directory containing .asciinema recordings
+data_dir = "./"        # Directory containing asciinema recordings
 db = "timelinema.db"       # SQLite database path
 
 # ── Authentication ────────────────────────────────────────

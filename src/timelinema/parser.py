@@ -88,6 +88,24 @@ def render_output_html(raw_output: str) -> str:
     return html
 
 
+def is_valid_asciinema(data: bytes) -> tuple[bool, bool]:
+    """Check if data is a valid asciinema v2 recording.
+
+    Returns (is_valid, is_gzipped).
+    """
+    is_gz = data[:2] == b"\x1f\x8b"
+    try:
+        if is_gz:
+            text = gzip.decompress(data).decode("utf-8", errors="replace")
+        else:
+            text = data.decode("utf-8", errors="replace")
+        first_line = text.split("\n", 1)[0].strip()
+        header = json.loads(first_line)
+        return isinstance(header, dict) and "version" in header, is_gz
+    except Exception:
+        return False, False
+
+
 def load_asciinema(filepath: str | Path):
     """Load an asciinema v2 file (plain or gzipped).
 

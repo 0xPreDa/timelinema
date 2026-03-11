@@ -13,7 +13,7 @@ Timeline viewer for [asciinema](https://asciinema.org/) terminal recordings. Par
 - **Session filtering** - View commands from specific recording sessions
 - **Dark/Light theme** - Toggle with preference saved in browser
 - **Timezone selector** - Display timestamps in any UTC offset
-- **Drag-and-drop upload** - Drop `.asciinema` files onto the page to add recordings
+- **Drag-and-drop upload** - Drop `asciinema` files onto the page to add recordings
 - **Lazy loading** - Command output fetched on demand for fast initial load
 
 ## Requirements
@@ -49,7 +49,7 @@ timelinema-stop
 |--------------|------------------|------------------------------------------|
 | `--host`     | `127.0.0.1`     | Bind address (`0.0.0.0` for network)     |
 | `--port`     | `5000`           | Port number                              |
-| `--data-dir` | `.` (current dir)| Directory containing `.asciinema` files  |
+| `--data-dir` | `.` (current dir)| Directory containing `asciinema` files  |
 | `--db`       | `timelinema.db`  | SQLite database path                     |
 | `--config`   | *(none)*         | Path to TOML configuration file          |
 
@@ -99,7 +99,7 @@ Sessions are organized into projects. A default project is created automatically
 - Switch between projects (timeline and session filter update accordingly)
 - Upload and reload target the active project
 
-Deleting a project removes its session data from the database but does **not** delete `.asciinema` files from disk.
+Deleting a project removes its session data from the database but does **not** delete `asciinema` files from disk.
 
 ## Import / Export
 
@@ -108,7 +108,7 @@ Deleting a project removes its session data from the database but does **not** d
 
 ## Input format
 
-Timelinema accepts asciinema v2 recordings, both plain (`.asciinema`) and gzip-compressed (`.asciinema.gz`). Place them in your data directory and start the server - files are parsed and indexed into SQLite on first run.
+Timelinema accepts asciinema v2 recordings, both plain and gzip-compressed. Place them in your data directory and start the server - files are parsed and indexed into SQLite on first run.
 
 Use the **Reload** button or `POST /api/reload` to re-parse after adding new files.
 

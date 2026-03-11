@@ -26,8 +26,6 @@ from werkzeug.utils import secure_filename
 
 from . import database, parser
 
-ALLOWED_EXTENSIONS = {".asciinema", ".asciinema.gz"}
-
 
 def create_app(
     db_path: str = "timelinema.db",
@@ -240,21 +238,29 @@ def create_app(
         skipped = []
         for f in files:
             name = f.filename or ""
-            if name.endswith(".asciinema.gz"):
-                ext = ".asciinema.gz"
-            elif name.endswith(".asciinema"):
-                ext = ".asciinema"
-            else:
+            data = f.read()
+
+            valid, is_gz = parser.is_valid_asciinema(data)
+            if not valid:
                 skipped.append(name)
                 continue
 
-            safe_name = secure_filename(name)
+            # Ensure proper extension for parse_data_directory glob
+            if is_gz and not name.endswith(".asciinema.gz"):
+                base = Path(name).stem
+                safe_name = secure_filename(base + ".asciinema.gz")
+            elif not is_gz and not name.endswith(".asciinema"):
+                base = Path(name).stem
+                safe_name = secure_filename(base + ".asciinema")
+            else:
+                safe_name = secure_filename(name)
+
             if not safe_name:
                 skipped.append(name)
                 continue
 
             dest = data_dir / safe_name
-            f.save(str(dest))
+            dest.write_bytes(data)
             saved.append(safe_name)
 
         sessions_loaded = 0
@@ -456,7 +462,7 @@ def main():
     )
     ap.add_argument("--port", type=int, default=None, help="Port (default: 5000)")
     ap.add_argument(
-        "--data-dir", default=None, help="Directory with .asciinema files"
+        "--data-dir", default=None, help="Directory with asciinema files"
     )
     ap.add_argument("--db", default=None, help="SQLite database path")
     ap.add_argument("--config", default=None, help="Path to TOML configuration file")
