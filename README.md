@@ -1,12 +1,12 @@
 # Timelinema
 
-Timeline viewer for [asciinema](https://asciinema.org/) terminal recordings. Parses asciinema v2 files, extracts individual commands with their output, and presents them in a searchable, chronological web interface.
+Timeline viewer for [asciinema](https://asciinema.org/) terminal recordings. Parses asciinema v2 and v3 files, extracts individual commands with their output, and presents them in a searchable, chronological web interface.
 
 ## Features
 
-- **Command extraction** - Automatically detects commands from terminal title escape sequences (OSC 2/7)
+- **Command extraction** - Reconstructs shell commands from terminal echo, shell integration (OSC 133), and terminal titles
 - **Output preservation** - Renders ANSI color codes as styled HTML
-- **Search** - Multi-keyword search across all commands with highlight and navigation
+- **Search** - Multi-keyword search across all commands with highlight, navigation, and a clear button
 - **Projects** - Organize sessions into projects via a sidebar, create/rename/delete projects
 - **Authentication** - Optional shared-password protection via TOML config file
 - **Import/Export** - Export a project as a ZIP archive, import it on another instance
@@ -98,8 +98,20 @@ Sessions are organized into projects. A default project is created automatically
 - Create, rename, or delete projects
 - Switch between projects (timeline and session filter update accordingly)
 - Upload and reload target the active project
+- Browser uploads are stored in `uploads/` inside the configured data directory.
+  This folder and recording file extensions are ignored by Git. Reload and startup
+  scan both this folder and the data directory for legacy/manual recordings;
+  an uploaded copy takes precedence over a root-level file with the same name.
 
 Deleting a project removes its session data from the database but does **not** delete `asciinema` files from disk.
+
+### Clear the database
+
+Use **Clear database…** below the project list to remove imported data from all
+projects. The dialog shows database-wide totals and requires typing `DELETE`
+before the final confirmation. Commands, sessions and projects are removed in
+one transaction; one empty Default project remains. Recording files on disk are
+kept, so **Reload** or restarting the application can import them again.
 
 ## Import / Export
 
@@ -108,9 +120,24 @@ Deleting a project removes its session data from the database but does **not** d
 
 ## Input format
 
-Timelinema accepts asciinema v2 recordings, both plain and gzip-compressed. Place them in your data directory and start the server - files are parsed and indexed into SQLite on first run.
+Timelinema accepts asciinema v2 and v3 recordings (`.asciinema`, `.cast`, and their `.gz` variants). Compression is detected from file contents. Place them in your data directory and start the server - files are parsed and indexed into SQLite on first run.
 
-Use the **Reload** button or `POST /api/reload` to re-parse after adding new files.
+Use the **Reload** button or `POST /api/reload` to import new files and re-parse existing sessions in the selected project. Re-parsing replaces extracted commands atomically while retaining the session and its project. Source recordings must still be present in the data directory.
+
+The parser replays terminal editing with `pyte`, including cursor movement, deletion, completion/history redraws, wrapped lines, and private control sequences split across recording events. It uses the final shell echo rather than search-menu entries or raw keystrokes. Asciinema v3 event intervals are accumulated according to the [v3 format specification](https://docs.asciinema.org/manual/asciicast/v3/); v2 event offsets remain unchanged.
+
+Recordings without reliable shell markers use a conservative input-only fallback. History/completion cannot be recovered from keystrokes alone, so unresolved input is omitted. Missing echo or an incomplete recording can still limit command reconstruction. No recorded command is executed during parsing.
+
+After updating the application, reinstall its dependencies (including `pyte`), restart it, and use **Reload** to apply parser changes to existing sessions.
+
+### Parser tests
+
+```bash
+python -m pip install -e .
+python -m unittest discover -s tests -v
+```
+
+The regression suite uses synthetic recordings and temporary databases. It checks multiline submissions with the cursor on every edited row, multiple terminal widths, and fragmented events. Optional tests use a private corpus and `regression-manifest.json` stored in the ignored `uploads/` directory (or `TIMELINEMA_RECORDINGS_DIR`). The manifest holds filenames and ordered SHA-256 command fingerprints from a reviewed baseline; the public test code contains no client-derived fixtures. These tests are skipped when the manifest is absent. Keep the manifest private and only update it after reviewing a parsing change.
 
 ## API
 
@@ -126,6 +153,8 @@ Use the **Reload** button or `POST /api/reload` to re-parse after adding new fil
 | `/api/timeline`                       | GET    | Paginated commands (search/filter)    |
 | `/api/command/<id>`                   | GET    | Full output for a single command      |
 | `/api/reload`                         | POST   | Re-parse data directory               |
+| `/api/database`                       | GET    | Counts across all projects            |
+| `/api/database`                       | DELETE | Clear imported data; JSON `{"confirmation":"DELETE"}` required |
 | `/api/upload`                         | POST   | Upload recording files                |
 | `/api/auth/login`                     | POST   | Authenticate `{password}`             |
 | `/api/auth/logout`                    | POST   | Logout (invalidates session)          |

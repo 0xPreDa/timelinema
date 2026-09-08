@@ -116,6 +116,22 @@ def create_app(
             "index.html", auth_enabled=app.config["AUTH_ENABLED"]
         )
 
+    @app.route("/api/database", methods=["GET", "DELETE"])
+    def api_database():
+        if request.method == "DELETE":
+            data = request.get_json(silent=True)
+            if not isinstance(data, dict) or data.get("confirmation") != "DELETE":
+                return jsonify({"error": "Type DELETE to confirm clearing all projects."}), 400
+        conn = database.get_connection(app.config["DB_PATH"])
+        try:
+            if request.method == "DELETE":
+                database.clear_database(conn)
+                return jsonify({"status": "ok"})
+            return jsonify({table: conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                            for table in ("projects", "sessions", "commands")})
+        finally:
+            conn.close()
+
     # --- Project API ---
     @app.route("/api/projects")
     def api_projects():
@@ -219,7 +235,7 @@ def create_app(
         data = request.get_json(silent=True) or {}
         project_id = data.get("project_id")
         count = load_data(
-            app.config["DATA_DIR"], app.config["DB_PATH"], project_id=project_id
+            app.config["DATA_DIR"], app.config["DB_PATH"], project_id=project_id, reparse=True
         )
         return jsonify({"status": "ok", "sessions_loaded": count})
 
@@ -231,7 +247,7 @@ def create_app(
 
         project_id = request.form.get("project_id", type=int)
 
-        data_dir = Path(app.config["DATA_DIR"])
+        data_dir = Path(app.config["DATA_DIR"]) / "uploads"
         data_dir.mkdir(parents=True, exist_ok=True)
 
         saved = []
@@ -410,9 +426,9 @@ def create_app(
 
 
 def load_data(
-    data_dir: str, db_path: str, project_id: int | None = None
+    data_dir: str, db_path: str, project_id: int | None = None, *, reparse: bool = False
 ) -> int:
-    """Parse asciinema files and store in database. Returns number of new sessions."""
+    """Parse asciinema files and store in database. Returns number of loaded/refreshed sessions."""
     conn = database.init_db(db_path)
     try:
         # If no project_id provided, use Default project
@@ -426,7 +442,14 @@ def load_data(
         results = parser.parse_data_directory(data_dir)
         count = 0
         for session_info, commands in results:
-            if database.session_exists(conn, session_info["filename"]):
+            existing = conn.execute(
+                "SELECT id, project_id FROM sessions WHERE filename = ?",
+                (session_info["filename"],),
+            ).fetchone()
+            if existing:
+                if reparse and existing["project_id"] == project_id:
+                    database.replace_session_commands(conn, existing["id"], session_info, commands)
+                    count += 1
                 continue
 
             session_id = database.insert_session(

@@ -80,11 +80,30 @@
                 <button id="new-project-cancel" class="sidebar-cancel-btn">&#10005;</button>
             </div>
             <ul id="project-list" class="project-list"></ul>
+            <div class="sidebar-maintenance">
+                <button id="clear-database-btn" class="btn-secondary" title="Clear imported data from all projects">Clear database…</button>
+            </div>
         </aside>
         <main>
             <div id="timeline"></div>
         </main>
     </div>
+
+    <dialog id="clear-database-dialog" aria-labelledby="clear-database-title" aria-describedby="clear-database-description">
+        <form id="clear-database-form" class="dialog-content">
+            <h3 id="clear-database-title">Clear the entire database?</h3>
+            <p id="clear-database-summary" role="status"></p>
+            <p id="clear-database-description">All projects, sessions and commands will be removed. This cannot be undone. An empty Default project will remain.</p>
+            <p>Recording files on disk will be kept. Reload or restarting the app can import them again.</p>
+            <label for="clear-database-confirmation">Type <strong>DELETE</strong> to confirm</label>
+            <input id="clear-database-confirmation" class="dialog-input" autocomplete="off" spellcheck="false" required>
+            <p id="clear-database-error" class="dialog-warning" role="alert"></p>
+            <div class="dialog-actions">
+                <button type="button" id="clear-database-cancel" class="btn-secondary" autofocus>Cancel</button>
+                <button type="submit" id="clear-database-submit" class="btn-danger" disabled>Clear all projects</button>
+            </div>
+        </form>
+    </dialog>
 
     <!-- Import result dialog -->
     <dialog id="import-dialog">

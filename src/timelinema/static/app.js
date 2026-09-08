@@ -43,6 +43,24 @@ async function init() {
     initTimezoneSelect();
     document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
     document.getElementById('search').addEventListener('input', debounce(handleSearch, 200));
+    const search = document.getElementById('search');
+    const clearSearch = document.createElement('button');
+    clearSearch.id = 'search-clear';
+    clearSearch.type = 'button';
+    clearSearch.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+    clearSearch.title = 'Clear search';
+    clearSearch.setAttribute('aria-label', 'Clear search');
+    search.parentElement.appendChild(clearSearch);
+    const updateClearSearch = () => { clearSearch.hidden = search.value.length === 0; };
+    search.addEventListener('input', updateClearSearch);
+    clearSearch.addEventListener('click', () => {
+        search.value = '';
+        state.searchQuery = '';
+        updateClearSearch();
+        applySearch();
+        search.focus();
+    });
+    updateClearSearch();
     document.getElementById('search-prev').addEventListener('click', () => navigateMatch(-1));
     document.getElementById('search-next').addEventListener('click', () => navigateMatch(1));
     document.getElementById('search').addEventListener('keydown', (e) => {
@@ -57,6 +75,7 @@ async function init() {
 
     // Projects
     initProjectUI();
+    initClearDatabase();
 
     // Export / Import
     initExportImport();
@@ -68,6 +87,69 @@ async function init() {
     }
 
     await loadProjects();
+}
+
+function initClearDatabase() {
+    const dialog = document.getElementById('clear-database-dialog');
+    const form = document.getElementById('clear-database-form');
+    const input = document.getElementById('clear-database-confirmation');
+    const submit = document.getElementById('clear-database-submit');
+    const cancel = document.getElementById('clear-database-cancel');
+    const error = document.getElementById('clear-database-error');
+    let busy = false;
+    let ready = false;
+    const update = () => { submit.disabled = busy || !ready || input.value !== 'DELETE'; };
+    input.addEventListener('input', update);
+    cancel.addEventListener('click', () => { if (!busy) dialog.close(); });
+    dialog.addEventListener('cancel', (event) => { if (busy) event.preventDefault(); });
+    document.getElementById('clear-database-btn').addEventListener('click', async () => {
+        form.reset();
+        ready = false;
+        error.textContent = '';
+        update();
+        const summary = document.getElementById('clear-database-summary');
+        summary.textContent = 'Loading database totals…';
+        dialog.showModal();
+        try {
+            const response = await apiFetch('/api/database');
+            if (!response.ok) throw new Error('Could not load database totals. Close and try again.');
+            const counts = await response.json();
+            summary.textContent = ['projects', 'sessions', 'commands'].map(key =>
+                `${counts[key]} ${counts[key] === 1 ? key.slice(0, -1) : key}`).join(' · ');
+            ready = true;
+            update();
+        } catch (err) {
+            summary.textContent = '';
+            error.textContent = err.message;
+        }
+    });
+    form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        if (busy || !ready || input.value !== 'DELETE') return;
+        busy = true;
+        error.textContent = '';
+        input.disabled = cancel.disabled = true;
+        submit.textContent = 'Clearing…';
+        update();
+        try {
+            const response = await apiFetch('/api/database', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ confirmation: input.value }),
+            });
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || 'Could not clear the database.');
+            }
+            window.location.reload();
+        } catch (err) {
+            error.textContent = err.message;
+            busy = false;
+            input.disabled = cancel.disabled = false;
+            submit.textContent = 'Clear all projects';
+            update();
+        }
+    });
 }
 
 /* Theme */
@@ -578,7 +660,7 @@ async function handleReload() {
         const projRes = await apiFetch('/api/projects');
         state.projects = await projRes.json();
         renderProjectList();
-        btn.textContent = `Reloaded (${data.sessions_loaded} new)`;
+        btn.textContent = `Reloaded (${data.sessions_loaded} sessions)`;
         setTimeout(() => { btn.textContent = 'Reload'; btn.disabled = false; }, 2000);
     } catch (err) {
         btn.textContent = 'Error';

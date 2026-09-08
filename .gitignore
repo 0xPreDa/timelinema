@@ -11,6 +11,15 @@ build/
 
 # Database
 *.db
+*.db-wal
+*.db-shm
+
+# Uploaded recordings (including legacy files saved at the repository root)
+uploads/
+*.asciinema
+*.asciinema.gz
+*.cast
+*.cast.gz
 
 # IDE
 .vscode/
@@ -22,6 +31,7 @@ Thumbs.db
 
 # Env / secrets
 .env
+/config.toml
 *.pem
 *.key
 

@@ -1,30 +1,21 @@
 """Asciinema file parser.
 
 Extracts commands with absolute timestamps using header timestamp + event offset.
-Compatible with any asciinema v2 recording.
+Reads asciinema v2/v3 recordings.
+Uses prompt_detector for auto-detecting shell prompt formats.
 """
 
 import gzip
 import json
+import math
+import warnings
 import re
 from pathlib import Path
 
 from ansi2html import Ansi2HTMLConverter
 
-# Terminal title set by zsh before running a command: \x1b]2;command\x07
-TITLE_RE = re.compile(r"\x1b\]2;(.+?)\x07")
-
-# Terminal title reset to default prompt (not a command)
-ROOT_TITLE_RE = re.compile(r"^root@")
-
-# Working directory from OSC 7: \x1b]7;file://host/path\x1b\\
-OSC7_CWD_RE = re.compile(r"\x1b\]7;file://[^/]*(/.+?)\x1b\\")
-
-# OSC sequences: \x1b]...\x07 or \x1b]...\x1b\\
-OSC_RE = re.compile(r"\x1b\].*?(?:\x07|\x1b\\)")
-
-# CSI sequences that are NOT SGR (color): \x1b[...X where X is not 'm'
-CSI_NON_SGR_RE = re.compile(r"\x1b\[[\d;]*[A-LN-Za-ln-z]")
+from .prompt_detector import detect_strategy
+from .terminal import shell_events, strip_escapes
 
 # Other control chars (keep \n, \r, \t)
 CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1a]")
@@ -40,24 +31,9 @@ def strip_ansi_sgr(text: str) -> str:
     return SGR_RE.sub("", text)
 
 
-def extract_command_from_title(data: str) -> str | None:
-    """Extract command from terminal title set event."""
-    match = TITLE_RE.search(data)
-    if not match:
-        return None
-    title = match.group(1)
-    if ROOT_TITLE_RE.match(title):
-        return None
-    # Filter out file:// and other non-command titles
-    if title.startswith("file://") or title.startswith("/"):
-        return None
-    return title
-
-
 def strip_control_sequences(text: str) -> str:
     """Keep SGR (color) sequences, remove everything else."""
-    text = OSC_RE.sub("", text)
-    text = CSI_NON_SGR_RE.sub("", text)
+    text = strip_escapes(text, keep_sgr=True)
     text = CTRL_RE.sub("", text)
 
     # Handle carriage returns (progress bars, spinners)
@@ -89,7 +65,7 @@ def render_output_html(raw_output: str) -> str:
 
 
 def is_valid_asciinema(data: bytes) -> tuple[bool, bool]:
-    """Check if data is a valid asciinema v2 recording.
+    """Check if data is a valid asciinema v2/v3 recording.
 
     Returns (is_valid, is_gzipped).
     """
@@ -101,29 +77,51 @@ def is_valid_asciinema(data: bytes) -> tuple[bool, bool]:
             text = data.decode("utf-8", errors="replace")
         first_line = text.split("\n", 1)[0].strip()
         header = json.loads(first_line)
-        return isinstance(header, dict) and "version" in header, is_gz
+        return isinstance(header, dict) and header.get("version") in (2, 3), is_gz
     except Exception:
         return False, False
 
 
 def load_asciinema(filepath: str | Path):
-    """Load an asciinema v2 file (plain or gzipped).
+    """Load an asciinema v2/v3 file (plain or gzipped).
 
     Returns (header_dict, events_list).
     """
     filepath = Path(filepath)
-    open_fn = gzip.open if filepath.name.endswith(".gz") else open
+    with filepath.open("rb") as probe:
+        compressed = probe.read(2) == b"\x1f\x8b"
+    open_fn = gzip.open if compressed else open
 
-    with open_fn(filepath, "rt", encoding="utf-8", errors="replace") as f:
+    with open_fn(filepath, "rt", encoding="utf-8-sig", errors="replace") as f:
         header = json.loads(f.readline())
+        if not isinstance(header, dict) or header.get("version") not in (2, 3):
+            raise ValueError("Only asciinema v2/v3 and v3 recordings are supported")
+        version = header["version"]
+        if version == 3:
+            term = header.get("term", {})
+            header = {**header, "width": term.get("cols"), "height": term.get("rows")}
         events = []
-        for line in f:
+        elapsed = 0.0
+        for number, line in enumerate(f, 2):
             line = line.strip()
-            if line:
-                try:
-                    events.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
+            if not line or (version == 3 and line.startswith("#")):
+                continue
+            try:
+                event = json.loads(line)
+                if (not isinstance(event, list) or len(event) != 3
+                        or isinstance(event[0], bool)
+                        or not isinstance(event[0], (int, float))
+                        or not math.isfinite(event[0]) or event[0] < 0
+                        or not isinstance(event[1], str) or not isinstance(event[2], str)):
+                    raise ValueError("invalid event")
+                elapsed = elapsed + event[0] if version == 3 else event[0]
+                events.append([elapsed, event[1], event[2]])
+            except (ValueError, TypeError):
+                # Losing one delta in v3 invalidates every subsequent timestamp.
+                if version == 3:
+                    raise ValueError(f"Invalid asciinema v3 event at line {number}") from None
+                warnings.warn(f"Skipping invalid asciinema event at line {number}", stacklevel=2)
+
     return header, events
 
 
@@ -148,86 +146,26 @@ def parse_session(filepath: str | Path) -> tuple[dict, list[dict]]:
         "height": header.get("height"),
     }
 
+    # Auto-detect prompt format and extract command boundaries
+    events = list(shell_events(events))
+    strategy = detect_strategy(events, header.get("width") or 80, header.get("height") or 24)
+    boundaries = strategy.detect(events)
+
+    # Convert boundaries to command dicts
     commands = []
-
-    # State machine
-    current_command_offset = None
-    current_cwd = ""
-    current_command = None
-    output_parts: list[str] = []
-    waiting_for_command = False
-    input_buffer = ""
-
-    def finalize_command():
-        nonlocal current_command_offset, current_command, output_parts
-        if current_command is not None and current_command_offset is not None:
-            raw_output = "".join(output_parts)
-            commands.append({
-                "absolute_timestamp": base_ts + current_command_offset,
-                "command": current_command,
-                "output_raw": raw_output,
-                "output_html": render_output_html(raw_output),
-                "working_directory": current_cwd,
-                "duration": None,  # computed later
-            })
-
-    for event in events:
-        ts, event_type, data = event[0], event[1], event[2]
-
-        if event_type == "o":
-            # Extract working directory from OSC 7
-            cwd_match = OSC7_CWD_RE.search(data)
-            if cwd_match:
-                current_cwd = cwd_match.group(1)
-
-            # Detect prompt reset (terminal title set to root@...)
-            title_match = TITLE_RE.search(data)
-            if title_match and ROOT_TITLE_RE.match(title_match.group(1)):
-                # New prompt — finalize previous command
-                finalize_command()
-
-                current_command = None
-                current_command_offset = None
-                output_parts = []
-                waiting_for_command = True
-                input_buffer = ""
-                continue
-
-            # Check for terminal title (command being executed)
-            if waiting_for_command:
-                cmd = extract_command_from_title(data)
-                if cmd is not None:
-                    current_command = cmd
-                    current_command_offset = ts
-                    waiting_for_command = False
-                    output_parts = []
-                    continue
-
-            # Accumulate output if we have a command running
-            if current_command is not None:
-                output_parts.append(data)
-
-        elif event_type == "i":
-            if waiting_for_command:
-                # Track input for fallback command reconstruction
-                if data == "\r":
-                    cmd = input_buffer.strip()
-                    if cmd:
-                        input_buffer = cmd
-                elif data == "\x7f" or data == "\b":
-                    # Backspace
-                    input_buffer = input_buffer[:-1]
-                elif data == "\x03":
-                    # Ctrl+C - discard
-                    input_buffer = ""
-                elif len(data) == 1 and ord(data) >= 32:
-                    input_buffer += data
-                elif len(data) > 1 and not data.startswith("\x1b"):
-                    # Paste event
-                    input_buffer += data
-
-    # Finalize last command
-    finalize_command()
+    for b in boundaries:
+        raw_output = "".join(
+            ev[2] for ev in events[b.output_start_index:b.output_end_index]
+            if ev[1] == "o"
+        )
+        commands.append({
+            "absolute_timestamp": base_ts + b.command_offset,
+            "command": b.command,
+            "output_raw": raw_output,
+            "output_html": render_output_html(raw_output),
+            "working_directory": b.working_directory or "",
+            "duration": None,
+        })
 
     # Compute durations
     for i in range(len(commands) - 1):
@@ -235,6 +173,22 @@ def parse_session(filepath: str | Path) -> tuple[dict, list[dict]]:
             commands[i + 1]["absolute_timestamp"] - commands[i]["absolute_timestamp"],
             1,
         )
+
+    # Last command: compute duration from the last event in the recording
+    if commands and events:
+        last_event_ts = base_ts + events[-1][0]
+        commands[-1]["duration"] = round(
+            last_event_ts - commands[-1]["absolute_timestamp"],
+            1,
+        )
+
+    # Fill empty working directories with the last known CWD
+    last_cwd = ""
+    for cmd in commands:
+        if cmd["working_directory"]:
+            last_cwd = cmd["working_directory"]
+        elif last_cwd:
+            cmd["working_directory"] = last_cwd
 
     return session_info, commands
 
@@ -247,10 +201,15 @@ def parse_data_directory(data_dir: str | Path) -> list[tuple[dict, list[dict]]]:
     data_dir = Path(data_dir)
     results = []
 
-    patterns = ["*.asciinema", "*.asciinema.gz"]
-    files = []
-    for pattern in patterns:
-        files.extend(data_dir.glob(pattern))
+    patterns = ["*.asciinema", "*.asciinema.gz", "*.cast", "*.cast.gz"]
+    # Keep legacy/manual recordings readable, and discover browser uploads.
+    # Prefer the uploaded copy when a legacy file has the same name.
+    by_name = {}
+    for directory in (data_dir, data_dir / "uploads"):
+        for pattern in patterns:
+            for filepath in directory.glob(pattern):
+                by_name[filepath.name] = filepath
+    files = list(by_name.values())
 
     for filepath in sorted(files):
         try:

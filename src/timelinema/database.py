@@ -103,6 +103,16 @@ def init_db(db_path: str | Path) -> sqlite3.Connection:
     return conn
 
 
+def clear_database(conn: sqlite3.Connection) -> None:
+    """Remove imported data atomically, leaving one empty project and the schema."""
+    with conn:
+        conn.execute("DELETE FROM commands")
+        conn.execute("DELETE FROM sessions")
+        conn.execute("DELETE FROM projects")
+        conn.execute("INSERT INTO projects (name, created_at) VALUES (?, ?)",
+                     ("Default", time.time()))
+
+
 def session_exists(conn: sqlite3.Connection, filename: str) -> bool:
     row = conn.execute(
         "SELECT 1 FROM sessions WHERE filename = ?", (filename,)
@@ -141,6 +151,25 @@ def insert_commands(
         commands,
     )
     conn.commit()
+
+
+def replace_session_commands(conn: sqlite3.Connection, session_id: int,
+                             session_info: dict, commands: list[dict]) -> None:
+    """Atomically refresh parsed data while retaining session/project identity."""
+    with conn:
+        conn.execute(
+            "UPDATE sessions SET title = ?, start_timestamp = ?, width = ?, height = ? WHERE id = ?",
+            (session_info["title"], session_info["start_timestamp"],
+             session_info["width"], session_info["height"], session_id),
+        )
+        conn.execute("DELETE FROM commands WHERE session_id = ?", (session_id,))
+        conn.executemany(
+            "INSERT INTO commands "
+            "(session_id, absolute_timestamp, command, output_raw, output_html, working_directory, duration) "
+            "VALUES (:session_id, :absolute_timestamp, :command, :output_raw, :output_html, "
+            ":working_directory, :duration)",
+            [{**cmd, "session_id": session_id} for cmd in commands],
+        )
 
 
 def get_timeline(
